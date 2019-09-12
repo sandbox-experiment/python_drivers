@@ -158,6 +158,48 @@ class ZNB20(Instrument):
                            option_list = ['Auto', 'Alternated', 'Chopped'],
                            type        = types.StringType)
 
+        self.add_parameter('delay_time_p1',
+                           flags       = Instrument.FLAG_GETSET,
+                           units       = 's',
+                           minval      = -3.336,
+                           maxval      = 3.336,
+                           type        = types.FloatType)
+
+        # self.add_parameter('delay_length_mech_p1',
+        #                    flags       = Instrument.FLAG_GETSET,
+        #                    units       = 'm',
+        #                    minval      = -3.4e38,
+        #                    maxval      = 3.4e38,
+        #                    type        = types.FloatType)
+
+        # self.add_parameter('delay_length_ele_p1',
+        #                    flags       = Instrument.FLAG_GETSET,
+        #                    units       = 'm',
+        #                    minval      = -1e9,
+        #                    maxval      = 1e9,
+        #                    type        = types.FloatType)
+
+        self.add_parameter('delay_time_p2',
+                           flags       = Instrument.FLAG_GETSET,
+                           units       = 's',
+                           minval      = -3.336,
+                           maxval      = 3.336,
+                           type        = types.FloatType)
+
+        # self.add_parameter('delay_length_mech_p2',
+        #                    flags       = Instrument.FLAG_GETSET,
+        #                    units       = 'm',
+        #                    minval      = -3.4e38,
+        #                    maxval      = 3.4e38,
+        #                    type        = types.FloatType)
+
+        # self.add_parameter('delay_length_ele_p2',
+        #                    flags       = Instrument.FLAG_GETSET,
+        #                    units       = 'm',
+        #                    minval      = -1e9,
+        #                    maxval      = 1e9,
+        #                    type        = types.FloatType)
+
 
 
         self.add_function('get_all')
@@ -214,6 +256,12 @@ class ZNB20(Instrument):
         self.get_status()
         self.get_cwfrequency()
         self.get_driving_mode()
+        self.get_delay_time_p1()
+        # self.get_delay_length_mech_p1()
+        # self.get_delay_length_ele_p1()
+        self.get_delay_time_p2()
+        # self.get_delay_length_mech_p2()
+        # self.get_delay_length_ele_p2()
 
 
 
@@ -254,10 +302,25 @@ class ZNB20(Instrument):
 
         # We clear average
         self.averageclear()
-
+        self.set_trigger_link('POIN')
         self.set_status('on')
 
+    def initialize_one_tone_power_sweep(self, traces, Sparams):
 
+        # Linear sweep in frequency
+        self.set_sweeptype('POW')
+
+        # Trigger to immediate
+        self.set_trigger('imm')
+
+        # We create traces in memory
+        self.create_traces(traces, Sparams)
+
+        # No partial measurement
+        self.set_driving_mode('chopped')
+
+        self.set_status('on')
+        
 ###################################################################
 #
 #                           Trace
@@ -362,9 +425,17 @@ class ZNB20(Instrument):
         if data_format.lower() == 'real-imag':
             return real, imag
         elif data_format.lower() == 'db-phase':
-            return 20.*np.log10(abs(real + 1j*imag)), np.angle(real + 1j*imag)
+            try : 
+                return 20.*np.log10(abs(real + 1j*imag)), np.angle(real + 1j*imag)
+            except RuntimeError : 
+                print 'Division by zero error - Phase'
+                return np.ones_like(real)
         elif data_format.lower() == 'amp-phase':
-            return abs(real + 1j*imag)**2., np.angle(real + 1j*imag)
+            try : 
+                return abs(real + 1j*imag)**2., np.angle(real + 1j*imag)
+            except RuntimeError : 
+                print 'Division by zero error - Amplitude'
+                return np.ones_like(real)
         else:
             raise ValueError("data-format must be: 'real-imag', 'db-phase', 'amp-phase'.")
 
@@ -495,17 +566,17 @@ class ZNB20(Instrument):
         LINear | LOGarithmic | POWer | CW | POINt | SEGMent
 
         Input:
-            sweeptype (string): LIN, LOG, POW, CW, POIN or SEG
+            sweeptype (string): LIN, LOG, POW, CW, POIN or SEGM
         Output:
             None
         '''
         logging.debug(__name__ +\
                       ' : The type of the sweep is set to %s' % sweeptype)
 
-        if sweeptype.upper() in ('LIN', 'LOG', 'POW', 'CW', 'POIN', 'SEG'):
+        if sweeptype.upper() in ('LIN', 'LOG', 'POW', 'CW', 'POIN', 'SEGM'):
             self._visainstrument.write("SWE:TYPE "+str(sweeptype.upper()))
         else:
-            raise ValueError('set_sweeptype(): can only set LIN, LOG, POW, CW, POIN or SEG')
+            raise ValueError('set_sweeptype(): can only set LIN, LOG, POW, CW, POIN or SEGM')
 
 
 #########################################################
@@ -1073,7 +1144,7 @@ class ZNB20(Instrument):
                 None
         '''
 
-        logging.info(__name__+' : Set the power of the instrument')
+        logging.info(__name__+' : Set the number of points for the sweep')
         self._visainstrument.write('sens:sweep:points '+str(points))
 
 
@@ -1225,3 +1296,77 @@ class ZNB20(Instrument):
             self._visainstrument.write('COUP ALL')
         else:
             raise ValueError("The mode must be 'auto', 'alternated' or 'chopped'")
+
+
+
+
+#####################################################################################
+#
+#                Delay / Electrical Length / Mechanical Length
+#
+#####################################################################################
+
+
+    def do_set_delay_time_p1(self, time = 0):
+        '''
+            Set the time delay for port 1 (manual page 735)
+
+
+            Input:
+                time (float): time delay for port 1
+                               [s]
+
+            Output:
+                None
+        '''
+
+        logging.info(__name__+' : Set the time delay for port 1')
+        self._visainstrument.write('sens:corr:edel1:time '+str(time))
+
+
+    def do_get_delay_time_p1(self):
+        '''
+            Get the time delay for port 1 (manual page 735)
+
+            Input:
+                None
+
+            Output:
+
+                time (float): time delay for port 1 [s]
+        '''
+
+        logging.info(__name__+' : Get the time delay for port 1')
+        return self._visainstrument.query('sens:corr:edel1:time?')
+
+    def do_set_delay_time_p2(self, time = 0):
+        '''
+            Set the time delay for port 2 (manual page 735)
+
+
+            Input:
+                time (float): time delay for port 2
+                               [s]
+
+            Output:
+                None
+        '''
+
+        logging.info(__name__+' : Set the time delay for port 2')
+        self._visainstrument.write('sens:corr:edel2:time '+str(time))
+
+
+    def do_get_delay_time_p2(self):
+        '''
+            Get the time delay for port 2 (manual page 735)
+
+            Input:
+                None
+
+            Output:
+
+                time (float): time delay for port 2 [s]
+        '''
+
+        logging.info(__name__+' : Get the time delay for port 2')
+        return self._visainstrument.query('sens:corr:edel2:time?')
